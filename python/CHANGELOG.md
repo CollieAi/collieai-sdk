@@ -2,12 +2,20 @@
 
 All notable changes to the CollieAi Python SDK.
 
-## [Unreleased]
+## [2.2.0] — 2026-10-06
+
+No functional changes: the client behaves exactly as 2.1.0. The source
+now lives in the public repository
+[CollieAi/collieai-sdk](https://github.com/CollieAi/collieai-sdk).
 
 ### Changed
 
 - License: MIT from 2.2.0 (Copyright (c) 2025 B25 B.V.). Earlier releases,
   up to and including 2.1.0, remain under Apache-2.0.
+- Package metadata: new description and keywords; the Repository, Issues
+  and Changelog links point to the public repository.
+- README: a new first screen with installation, a quick start and links
+  to the documentation.
 
 ## [2.1.0] — 2026-08-08
 

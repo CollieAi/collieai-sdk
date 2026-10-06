@@ -24,7 +24,7 @@ import { StreamingClient } from "./streaming.js";
 
 // Keep in sync with package.json — this value is the User-Agent the backend
 // sees, and the release gate verifies it on the wire against the release.
-export const VERSION = "2.1.0";
+export const VERSION = "2.2.0";
 const DEFAULT_BASE_URL = "https://app.collieai.io";
 
 type ChunkErrCtor = new (

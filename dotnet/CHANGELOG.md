@@ -2,12 +2,11 @@
 
 All notable changes to the CollieAi .NET SDK (`CollieAi.Client`).
 
-## [Unreleased]
+## [2.2.0] — 2026-10-06
 
-### Changed
-
-- License: MIT from 2.2.0 (Copyright (c) 2025 B25 B.V.). Earlier releases,
-  up to and including 2.1.0, remain under Apache-2.0.
+Additive: one new API (below); no existing member changed and nothing
+removed. The source now lives in the public repository
+[CollieAi/collieai-sdk](https://github.com/CollieAi/collieai-sdk).
 
 ### Added
 
@@ -17,9 +16,20 @@ All notable changes to the CollieAi .NET SDK (`CollieAi.Client`).
   A datapath adapter uses it to recompute `evaluated_payload_digest` over
   the payload it is about to forward and abort on mismatch. Conformance
   is pinned against the shared vector file
-  `sdk/conformance/mcp_canonical_vectors.json`, which the Python server
-  implementation must match vector-by-vector. Additive; no existing
-  member changed.
+  `conformance/mcp_canonical_vectors.json`, which the CollieAi server
+  checks vector-by-vector as well.
+- The PDB is embedded in the DLL and Source Link points to the public
+  repository: a debugger steps into the exact source of the release.
+
+### Changed
+
+- License: MIT from 2.2.0 (Copyright (c) 2025 B25 B.V.). Earlier releases,
+  up to and including 2.1.0, remain under Apache-2.0.
+- Package metadata: new description and tags, project URL, `Company` and
+  `Copyright` B25 B.V.; the repository link points to the public
+  repository.
+- README: a new first screen with installation, a quick start and links
+  to the documentation.
 
 ## [2.1.0] — 2026-08-08
 
