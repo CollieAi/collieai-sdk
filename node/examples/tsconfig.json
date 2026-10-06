@@ -1,0 +1,22 @@
+// Type-check the examples in CI so they can't silently drift from the SDK.
+//
+// The examples import `@collieai/sdk` (the published name) plus `express` and
+// `openai`. We deliberately do NOT install those two: they are heavy, they are
+// not SDK dependencies, and their types are not what rots here. What rots is
+// OUR API surface — so `paths` maps the package name onto ../src and the two
+// providers get loose ambient stubs (see _stubs.d.ts). Result: a renamed field
+// or a changed event shape fails CI; an express typo does not.
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "..",
+    "baseUrl": ".",
+    "paths": {
+      "@collieai/sdk": ["../src/index.ts"],
+      "@collieai/sdk/adapters/openai": ["../src/adapters/openai.ts"],
+      "@collieai/sdk/adapters/anthropic": ["../src/adapters/anthropic.ts"]
+    }
+  },
+  "include": ["*.ts", "_stubs.d.ts"]
+}

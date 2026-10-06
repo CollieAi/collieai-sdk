@@ -1,0 +1,391 @@
+{
+  "interval_s": 0.05,
+  "rtt_s": 0.01,
+  "timeout_s": 30.0,
+  "cases": [
+    {
+      "name": "job_0.3s_draw_0.5",
+      "job_s": 0.3,
+      "draw": 0.5,
+      "hint_ms": null,
+      "polls": 6,
+      "timed_out": false
+    },
+    {
+      "name": "job_8s_draw_0.5",
+      "job_s": 8.0,
+      "draw": 0.5,
+      "hint_ms": null,
+      "polls": 35,
+      "timed_out": false
+    },
+    {
+      "name": "job_11s_draw_0.5",
+      "job_s": 11.0,
+      "draw": 0.5,
+      "hint_ms": null,
+      "polls": 38,
+      "timed_out": false
+    },
+    {
+      "name": "job_8s_draw_0.0",
+      "job_s": 8.0,
+      "draw": 0.0,
+      "hint_ms": null,
+      "polls": 37,
+      "timed_out": false
+    },
+    {
+      "name": "job_999s_draw_0.5",
+      "job_s": 999.0,
+      "draw": 0.5,
+      "hint_ms": null,
+      "polls": 60,
+      "timed_out": true
+    },
+    {
+      "name": "job_8s_draw_0.5_hint_5000",
+      "job_s": 8.0,
+      "draw": 0.5,
+      "hint_ms": 5000,
+      "polls": 31,
+      "timed_out": false
+    },
+    {
+      "name": "job_29s_draw_0.5_hint_5000",
+      "job_s": 29.0,
+      "draw": 0.5,
+      "hint_ms": 5000,
+      "polls": 37,
+      "timed_out": false
+    },
+    {
+      "name": "job_29.3s_hint_5000_rtt_0.099",
+      "job_s": 29.3,
+      "draw": 0.5,
+      "hint_ms": 5000,
+      "rtt_s": 0.099,
+      "polls": 22,
+      "timed_out": false
+    },
+    {
+      "name": "job_29.3s_hint_5000_rtt_0.1",
+      "job_s": 29.3,
+      "draw": 0.5,
+      "hint_ms": 5000,
+      "rtt_s": 0.1,
+      "polls": 22,
+      "timed_out": false
+    },
+    {
+      "name": "job_29.99s_hint_5000_rtt_0.099",
+      "job_s": 29.99,
+      "draw": 0.5,
+      "hint_ms": 5000,
+      "rtt_s": 0.099,
+      "polls": 24,
+      "timed_out": true
+    },
+    {
+      "name": "job_29.99s_hint_5000_rtt_0.1",
+      "job_s": 29.99,
+      "draw": 0.5,
+      "hint_ms": 5000,
+      "rtt_s": 0.1,
+      "polls": 24,
+      "timed_out": true
+    },
+    {
+      "name": "job_29.89s_plain_rtt_0.099",
+      "job_s": 29.89,
+      "draw": 0.5,
+      "hint_ms": null,
+      "rtt_s": 0.099,
+      "polls": 41,
+      "timed_out": false
+    },
+    {
+      "name": "job_29.89s_plain_rtt_0.1",
+      "job_s": 29.89,
+      "draw": 0.5,
+      "hint_ms": null,
+      "rtt_s": 0.1,
+      "polls": 41,
+      "timed_out": true
+    },
+    {
+      "name": "job_11s_draw_0.5_age_schedule",
+      "job_s": 11.0,
+      "draw": 0.5,
+      "hint_ms": null,
+      "hint_schedule": [
+        [
+          0.0,
+          50
+        ],
+        [
+          0.4,
+          100
+        ],
+        [
+          0.8,
+          200
+        ],
+        [
+          1.6,
+          500
+        ],
+        [
+          4.0,
+          1000
+        ],
+        [
+          8.0,
+          2000
+        ],
+        [
+          16.0,
+          5000
+        ]
+      ],
+      "polls": 37,
+      "timed_out": false
+    },
+    {
+      "name": "job_29.3s_rtt_0.1_plain",
+      "job_s": 29.3,
+      "draw": 0.5,
+      "hint_ms": null,
+      "rtt_s": 0.1,
+      "polls": 39,
+      "timed_out": false
+    },
+    {
+      "name": "job_29.3s_age_schedule_rtt_0.1",
+      "job_s": 29.3,
+      "draw": 0.5,
+      "hint_ms": null,
+      "rtt_s": 0.1,
+      "hint_schedule": [
+        [
+          0.0,
+          50
+        ],
+        [
+          0.4,
+          100
+        ],
+        [
+          0.8,
+          200
+        ],
+        [
+          1.6,
+          500
+        ],
+        [
+          4.0,
+          1000
+        ],
+        [
+          8.0,
+          2000
+        ],
+        [
+          16.0,
+          5000
+        ]
+      ],
+      "polls": 28,
+      "timed_out": false
+    },
+    {
+      "name": "job_29.97s_rtt_0.08_plain",
+      "job_s": 29.97,
+      "draw": 0.5,
+      "hint_ms": null,
+      "rtt_s": 0.08,
+      "polls": 43,
+      "timed_out": true
+    },
+    {
+      "name": "job_29.97s_host5000_at_6_rtt_0.08",
+      "job_s": 29.97,
+      "draw": 0.5,
+      "hint_ms": null,
+      "rtt_s": 0.08,
+      "hint_schedule": [
+        [
+          0.0,
+          50
+        ],
+        [
+          0.4,
+          100
+        ],
+        [
+          0.8,
+          200
+        ],
+        [
+          1.6,
+          500
+        ],
+        [
+          4.0,
+          1000
+        ],
+        [
+          6.0,
+          5000
+        ]
+      ],
+      "polls": 28,
+      "timed_out": true
+    },
+    {
+      "name": "job_1.6s_host5000",
+      "job_s": 1.6,
+      "draw": 0.5,
+      "hint_ms": 5000,
+      "polls": 27,
+      "timed_out": false
+    },
+    {
+      "name": "job_2.914s_age_schedule_timeout_3",
+      "job_s": 2.914,
+      "draw": 0.0,
+      "hint_ms": null,
+      "timeout_s": 3.0,
+      "hint_schedule": [
+        [
+          0.0,
+          50
+        ],
+        [
+          0.4,
+          100
+        ],
+        [
+          0.8,
+          200
+        ],
+        [
+          1.6,
+          500
+        ],
+        [
+          4.0,
+          1000
+        ],
+        [
+          8.0,
+          2000
+        ],
+        [
+          16.0,
+          5000
+        ]
+      ],
+      "polls": 34,
+      "timed_out": false
+    },
+    {
+      "name": "job_5s_interval_0.2_draw_0.5",
+      "job_s": 5.0,
+      "draw": 0.5,
+      "hint_ms": null,
+      "interval_s": 0.2,
+      "polls": 15,
+      "timed_out": false
+    },
+    {
+      "name": "job_8s_interval_0.2_hint_5000",
+      "job_s": 8.0,
+      "draw": 0.5,
+      "hint_ms": 5000,
+      "interval_s": 0.2,
+      "polls": 13,
+      "timed_out": false
+    },
+    {
+      "name": "job_25s_interval_10_draw_0.5",
+      "job_s": 25.0,
+      "draw": 0.5,
+      "hint_ms": null,
+      "interval_s": 10.0,
+      "polls": 4,
+      "timed_out": false
+    },
+    {
+      "name": "job_8s_rtt_schedule",
+      "job_s": 8.0,
+      "draw": 0.5,
+      "hint_ms": null,
+      "rtt_schedule": [
+        [
+          0,
+          10
+        ],
+        [
+          20,
+          50
+        ]
+      ],
+      "polls": 33,
+      "timed_out": false
+    },
+    {
+      "name": "job_29.5s_rtt_schedule_age_hint",
+      "job_s": 29.5,
+      "draw": 0.5,
+      "hint_ms": null,
+      "rtt_schedule": [
+        [
+          0,
+          10
+        ],
+        [
+          15,
+          50
+        ],
+        [
+          30,
+          20
+        ]
+      ],
+      "hint_schedule": [
+        [
+          0.0,
+          50
+        ],
+        [
+          0.4,
+          100
+        ],
+        [
+          0.8,
+          200
+        ],
+        [
+          1.6,
+          500
+        ],
+        [
+          4.0,
+          1000
+        ],
+        [
+          8.0,
+          2000
+        ],
+        [
+          16.0,
+          5000
+        ]
+      ],
+      "polls": 41,
+      "timed_out": false
+    }
+  ]
+}
