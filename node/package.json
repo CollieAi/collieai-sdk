@@ -1,6 +1,6 @@
 {
   "name": "@collieai/sdk",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "AI guardrails SDK for Node and TypeScript: prompt injection detection, PII redaction and safe LLM streaming for OpenAI, Anthropic and your own models.",
   "type": "module",
   "license": "MIT",
