@@ -1,0 +1,56 @@
+{
+  "amendment": "v25 (2026-07-23)",
+  "note": "Cross-SDK verdict-resolution vectors (Poll Backoff Contract amendment v25). Each case is a terminal job-status JSON and the fail-safe InputModerationResult it MUST resolve to, replayed by every SDK's mapper (Python _to_result, Node toModerationResult, .NET ToResult) AND driven end-to-end through the protect_stream wrapper (expect.provider_runs = does the wrapper run the provider). An ambiguous/empty inbound_result or a root context block must never fail-open OR run the provider. Hand-maintained; expect.block_message asserted only when present. provider_runs == allowed by contract (the wrapper gates on !allowed || blocked).",
+  "cases": [
+    {
+      "name": "explicit_allow",
+      "job": {"status": "completed", "inbound_result": {"allowed": true, "blocked": false, "triggered_rules": []}},
+      "expect": {"allowed": true, "blocked": false, "provider_runs": true}
+    },
+    {
+      "name": "explicit_block_carries_message",
+      "job": {"status": "inbound_blocked", "inbound_result": {"allowed": false, "blocked": true, "block_message": "blocked by policy", "triggered_rules": []}},
+      "expect": {"allowed": false, "blocked": true, "block_message": "blocked by policy", "provider_runs": false}
+    },
+    {
+      "name": "empty_inbound_result_fails_safe",
+      "job": {"status": "completed", "inbound_result": {}},
+      "expect": {"allowed": false, "blocked": true, "provider_runs": false}
+    },
+    {
+      "name": "absent_allowed_with_status_blocked",
+      "job": {"status": "inbound_blocked", "inbound_result": {"triggered_rules": []}},
+      "expect": {"allowed": false, "blocked": true, "provider_runs": false}
+    },
+    {
+      "name": "allowed_true_but_status_blocked_conflict",
+      "job": {"status": "inbound_blocked", "inbound_result": {"allowed": true, "blocked": false}},
+      "expect": {"allowed": false, "blocked": true, "provider_runs": false}
+    },
+    {
+      "name": "inbound_blocked_flag_only",
+      "job": {"status": "completed", "inbound_result": {"blocked": true}},
+      "expect": {"allowed": false, "blocked": true, "provider_runs": false}
+    },
+    {
+      "name": "allowed_false_flag_only",
+      "job": {"status": "completed", "inbound_result": {"allowed": false}},
+      "expect": {"allowed": false, "blocked": true, "provider_runs": false}
+    },
+    {
+      "name": "context_block_over_allowed_inbound_surfaces_ctx_message",
+      "job": {"status": "completed", "inbound_result": {"allowed": true, "blocked": false, "triggered_rules": []}, "blocked_by": "context", "context_result": {"status": "blocked", "blocked": true, "block_message": "context rule tripped"}},
+      "expect": {"allowed": false, "blocked": true, "block_message": "context rule tripped", "provider_runs": false}
+    },
+    {
+      "name": "context_clean_keeps_allow",
+      "job": {"status": "completed", "inbound_result": {"allowed": true, "blocked": false, "triggered_rules": []}, "context_result": {"status": "clean", "blocked": false}},
+      "expect": {"allowed": true, "blocked": false, "provider_runs": true}
+    },
+    {
+      "name": "inbound_block_message_wins_over_context",
+      "job": {"status": "inbound_blocked", "inbound_result": {"allowed": false, "blocked": true, "block_message": "inbound msg", "triggered_rules": []}, "context_result": {"status": "blocked", "blocked": true, "block_message": "context msg"}},
+      "expect": {"allowed": false, "blocked": true, "block_message": "inbound msg", "provider_runs": false}
+    }
+  ]
+}

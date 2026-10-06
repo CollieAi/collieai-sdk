@@ -1,0 +1,40 @@
+{
+  "name": "@collieai/sdk",
+  "version": "2.1.0",
+  "description": "AI guardrails SDK for Node and TypeScript: prompt injection detection, PII redaction and safe LLM streaming for OpenAI, Anthropic and your own models.",
+  "type": "module",
+  "license": "MIT",
+  "author": "CollieAi <sdk@collieai.io> (https://collieai.io)",
+  "homepage": "https://collieai.io/?utm_source=npm&utm_medium=package&utm_campaign=sdk-node",
+  "repository": { "type": "git", "url": "git+https://github.com/CollieAi/collieai-sdk.git", "directory": "node" },
+  "bugs": { "url": "https://github.com/CollieAi/collieai-sdk/issues" },
+  "keywords": ["llm-security", "ai-guardrails", "guardrails", "prompt-injection", "ai-firewall", "llm-firewall", "pii-redaction", "content-moderation", "llm", "openai", "anthropic", "streaming"],
+  "engines": { "node": ">=18" },
+  "files": ["dist"],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./adapters/openai": "./dist/adapters/openai.js",
+    "./adapters/anthropic": "./dist/adapters/anthropic.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "mutation:pacer": "stryker run",
+    "mutation:streaming": "stryker run stryker.streaming.conf.json",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependenciesMeta": {
+    "openai": { "optional": true },
+    "@anthropic-ai/sdk": { "optional": true }
+  },
+  "devDependencies": {
+    "@stryker-mutator/core": "8.7.1",
+    "@stryker-mutator/vitest-runner": "8.7.1",
+    "typescript": "^5.4.0",
+    "vitest": "^3.0.0"
+  }
+}

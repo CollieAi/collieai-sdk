@@ -1,0 +1,7 @@
+{
+  "sdk": {
+    "version": "8.0.100",
+    "rollForward": "latestFeature",
+    "_comment": "Pin the SDK band for everything under sdk/dotnet: Stryker.NET 4.0.6's Buildalyzer crashes with PathTooLongException when a 10.x SDK resolves (first nightly run, 2026-08-08). GitHub runners preinstall newer SDKs; setup-dotnet adds 8.0.x and this file makes dotnet pick it. Local dev runs 8.0.4xx — latestFeature stays inside the 8.0 band."
+  }
+}

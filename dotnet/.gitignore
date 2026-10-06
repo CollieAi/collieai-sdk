@@ -1,0 +1,9 @@
+# .NET build artifacts
+bin/
+obj/
+*.user
+*.suo
+.vs/
+artifacts/
+[Tt]est[Rr]esults/
+*.nupkg

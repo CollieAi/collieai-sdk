@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>CollieAi.Client</PackageId>
+    <Version>2.1.0</Version>
+    <Authors>CollieAi</Authors>
+    <Company>B25 B.V.</Company>
+    <Copyright>Copyright (c) 2025 B25 B.V.</Copyright>
+    <Description>AI guardrails SDK for .NET: prompt injection detection, PII redaction and safe LLM streaming for OpenAI, Anthropic and your own models.</Description>
+    <PackageTags>llm-security;ai-guardrails;guardrails;prompt-injection;ai-firewall;llm-firewall;pii-redaction;content-moderation;llm;openai;anthropic;streaming</PackageTags>
+    <PackageProjectUrl>https://collieai.io/?utm_source=nuget&amp;utm_medium=package&amp;utm_campaign=sdk-dotnet</PackageProjectUrl>
+    <RootNamespace>CollieAi</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsPackable>true</IsPackable>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <!-- Public, reproducible package (sdk-publication RFC §3). The release
+       workflow packs from a checkout of the public repository: the PDB is
+       embedded in the DLL (no separate symbol package), Source Link (built
+       into the .NET 8 SDK) points debuggers at that repository, and on CI
+       ContinuousIntegrationBuild maps source paths to /_/ so no build-machine
+       path is compiled into the assembly. -->
+  <PropertyGroup>
+    <DebugType>embedded</DebugType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <RepositoryUrl>https://github.com/CollieAi/collieai-sdk</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- System.Net.Http.Json and System.Text.Json ship in the net8.0 framework. -->
+    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="8.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="CollieAi.Client.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Ship the SDK README on the NuGet package page (PackageReadmeFile above). -->
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>
