@@ -2,6 +2,14 @@
 
 All notable changes to the CollieAi Node SDK (`@collieai/sdk`).
 
+## [2.3.0] — 2026-11-11
+
+### Added
+
+- **File analysis (preview — the deployment must enable it).** `collie.files.upload(content, { filename, contentType?, retain? })` (takes the bytes — the SDK stays dependency-free), `.get(id)`, `.delete(id)` with `FileObject`; `moderate.input({ prompt?, attachments })` — `prompt` may be omitted when there are attachments; the result's `fileResult` summarizes the files. With attachments the request carries `client_now` and `client_deadline_at` (`requestTimeoutS` plus `timeoutS`, computed before the job is created).
+- `FileAnalysisUnavailable` (a `CollieApiError`): HTTP 422 `file_analysis_unavailable`, or an attachment job that finished without a `file_result` (code `file_result_missing`).
+- `ModerationTimeout` (a `ModerationError`, with `jobId`): `moderate.input` / `moderate.output` throw it when `timeoutS` runs out. Existing `instanceof ModerationError` checks keep matching; the message is unchanged.
+
 ## [2.2.0] — 2026-10-06
 
 No functional changes: the client behaves exactly as 2.1.0. The source

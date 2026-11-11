@@ -27,7 +27,7 @@ public class CollieException : Exception
 /// response body). Carries the HTTP status and the wire error code/message when
 /// present.
 /// </summary>
-public sealed class CollieApiException : CollieException
+public class CollieApiException : CollieException
 {
     /// <summary>HTTP status code, when derived from a response.</summary>
     public int? StatusCode { get; }
@@ -280,8 +280,41 @@ public sealed class ConcurrentSessionUseException : CollieException
 /// or timed out before producing a verdict. (A policy block is NOT an error — it
 /// is a normal <see cref="InputModerationResult"/> with <c>Blocked = true</c>.)
 /// </summary>
-public sealed class ModerationException : CollieException
+public class ModerationException : CollieException
 {
     /// <summary>Initializes a new instance with a message.</summary>
     public ModerationException(string message) : base(message) { }
+}
+
+/// <summary>
+/// <c>CheckInputAsync</c> / <c>CheckOutputAsync</c> gave up waiting: the SDK's
+/// own poll budget (<c>TimeoutS</c>) ran out before a verdict. A
+/// <see cref="ModerationException"/>, so existing <c>catch (ModerationException)</c>
+/// blocks keep catching it.
+/// </summary>
+public sealed class ModerationTimeoutException : ModerationException
+{
+    /// <summary>The job that may still finish server-side.</summary>
+    public string? JobId { get; }
+
+    /// <summary>Initializes a new instance with a message and the job id.</summary>
+    public ModerationTimeoutException(string message, string? jobId) : base(message)
+    {
+        JobId = jobId;
+    }
+}
+
+/// <summary>
+/// File analysis is not available for this request: the deployment has it off
+/// (HTTP 422, code <c>file_analysis_unavailable</c>), or a job with attachments
+/// finished its input check without a <c>file_result</c> (code
+/// <c>file_result_missing</c> — a server that does not analyze files).
+/// </summary>
+public sealed class FileAnalysisUnavailableException : CollieApiException
+{
+    /// <summary>Initializes a new instance with the wire status/code.</summary>
+    public FileAnalysisUnavailableException(string message, int? statusCode = null, string? code = null)
+        : base(message, statusCode, code)
+    {
+    }
 }

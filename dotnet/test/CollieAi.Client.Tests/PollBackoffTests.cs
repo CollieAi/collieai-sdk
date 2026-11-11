@@ -269,7 +269,7 @@ public class PollBackoffTests
         var slowClock = new VClock();
         var (slowClient, slowHandler) = Create(
             slowClock, TimedJob(slowClock, 29.89, rtt: slow.RttS));
-        var ex = await Assert.ThrowsAsync<ModerationException>(
+        var ex = await Assert.ThrowsAsync<ModerationTimeoutException>(
             () => slowClient.Moderation.CheckInputAsync(new InputModerationRequest { Prompt = "hi" }));
         Assert.Contains("timed out", ex.Message);
         Assert.True(slow.TimedOut);
@@ -570,7 +570,7 @@ public class PollBackoffTests
         // past the deadline — is covered by the real-clock test below.)
         var clock = new VClock();
         var (client, handler) = Create(clock, TimedJob(clock, 999.0));
-        var ex = await Assert.ThrowsAsync<ModerationException>(
+        var ex = await Assert.ThrowsAsync<ModerationTimeoutException>(
             () => client.Moderation.CheckInputAsync(new InputModerationRequest { Prompt = "hi" }));
         Assert.Contains("timed out", ex.Message);
         Assert.True(clock.Now <= 30.0 + Rtt, $"overshoot: {clock.Now}");
@@ -646,7 +646,7 @@ public class PollBackoffTests
         // bound must cancel a hung GET too, surfacing this flow's timeout.
         var client = CreateRealWith(new HangingGetHandler());
         var start = System.Diagnostics.Stopwatch.StartNew();
-        var ex = await Assert.ThrowsAsync<ModerationException>(
+        var ex = await Assert.ThrowsAsync<ModerationTimeoutException>(
             () => client.ModerationCore.RunAsync(
                 "hi", null, null, null, null, "moderate.input", CancellationToken.None, timeoutS: 0.25));
         Assert.Contains("timed out", ex.Message);
@@ -801,7 +801,7 @@ public class PollBackoffTests
             clock.Now += 1.0; // lands 0.5 s past the 0.5 s budget
             return ResponseSpec.Ok(Bodies.InboundAllowed());
         });
-        var ex = await Assert.ThrowsAsync<ModerationException>(
+        var ex = await Assert.ThrowsAsync<ModerationTimeoutException>(
             () => client.ModerationCore.RunAsync(
                 "hi", null, null, null, null, "moderate.input", CancellationToken.None, timeoutS: 0.5));
         Assert.Contains("timed out", ex.Message);
@@ -834,7 +834,7 @@ public class PollBackoffTests
             clock.Now += 1.0;
             return ResponseSpec.Error(HttpStatusCode.InternalServerError, "server_error", "late");
         });
-        var ex = await Assert.ThrowsAsync<ModerationException>(
+        var ex = await Assert.ThrowsAsync<ModerationTimeoutException>(
             () => client.ModerationCore.RunAsync(
                 "hi", null, null, null, null, "moderate.input", CancellationToken.None, timeoutS: 0.5));
         Assert.Contains("timed out", ex.Message);

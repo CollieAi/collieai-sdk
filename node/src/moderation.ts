@@ -6,7 +6,7 @@
  * `message_output`-only job polled to a terminal outbound state, evaluated
  * by OUTPUT-direction rules. */
 import type { CollieClient } from "./client.js";
-import { CollieApiError, CollieError, ModerationError } from "./errors.js";
+import { CollieApiError, CollieError, FileAnalysisUnavailable, ModerationError, ModerationTimeout } from "./errors.js";
 import { deadlineSignal, isDeadlineAbort, PollPacer } from "./pacing.js";
 import { toContextResult, toTriggeredRule } from "./_map.js";
 import type { InputModerationResult, OutputModerationResult } from "./types.js";
@@ -68,7 +68,8 @@ function assertJsonSafeContext(value: unknown, path = "context"): void {
 }
 
 export interface ModerateInputOptions {
-  prompt: string;
+  /** The text to check. May be omitted when there are `attachments`. */
+  prompt?: string;
   /** Structured data (object/array) or raw string analyzed alongside the
    * prompt. A structured value travels as JSON.
    * Inert until context analysis is enabled server-side. */
@@ -81,6 +82,11 @@ export interface ModerateInputOptions {
   correlationId?: string;
   pollIntervalS?: number;
   timeoutS?: number;
+  /** File analysis (preview): ids of files uploaded with `collie.files.upload`,
+   * checked with the prompt; the result's `fileResult` summarizes them. The
+   * request then carries the moment this call gives up (`client_deadline_at`:
+   * the request timeout plus `timeoutS`) and the client's clock. */
+  attachments?: string[];
 }
 
 export interface ModerateOutputOptions {
@@ -97,7 +103,7 @@ export interface ModerateOutputOptions {
 }
 
 interface RunOptions {
-  prompt: string;
+  prompt?: string;
   context?: unknown;
   contextFormat?: string;
   conversationId?: string;
@@ -105,6 +111,7 @@ interface RunOptions {
   sdkOrigin: string;
   pollIntervalS?: number;
   timeoutS?: number;
+  attachments?: string[];
 }
 
 export class ModerationClient {
@@ -123,6 +130,7 @@ export class ModerationClient {
       sdkOrigin: SDK_ORIGIN,
       pollIntervalS: opts.pollIntervalS,
       timeoutS: opts.timeoutS,
+      attachments: opts.attachments,
     });
   }
 
@@ -176,8 +184,9 @@ export class ModerationClient {
       // that timed out is a ModerationError on BOTH moderation methods, so
       // one catch covers the pair. Everything else stays typed as-is.
       if (e instanceof CollieApiError && e.code === "poll_timeout") {
-        throw new ModerationError(
+        throw new ModerationTimeout(
           `moderate.output timed out after ${timeoutS}s waiting for job ${jobId}`,
+          { jobId },
         );
       }
       if (e instanceof CollieApiError && e.code === "job_failed") {
@@ -199,10 +208,21 @@ export class ModerationClient {
     const pollIntervalS = opts.pollIntervalS === undefined ? 0.05 : opts.pollIntervalS;
     const timeoutS = opts.timeoutS === undefined ? 30 : opts.timeoutS;
     PollPacer.validate(pollIntervalS, timeoutS);
-    const body: Record<string, unknown> = {
-      message_input: opts.prompt,
-      inbound_only: true,
-    };
+    const attachments = validateAttachments(opts.prompt, opts.attachments);
+    const body: Record<string, unknown> =
+      opts.prompt !== undefined ? { message_input: opts.prompt, inbound_only: true } : { inbound_only: true };
+    if (attachments.length > 0) {
+      // File analysis: the files, and the moment this call gives
+      // up — computed BEFORE the POST from the request timeout plus the poll
+      // budget (which starts after it), with the client's clock so the server
+      // can correct the deadline for skew.
+      const now = this.c._utcNow();
+      body.attachments = attachments.map((fileId) => ({ file_id: fileId }));
+      body.client_now = now.toISOString();
+      body.client_deadline_at = new Date(
+        now.getTime() + (this.c._requestTimeoutS + timeoutS) * 1000,
+      ).toISOString();
+    }
     // Context-analysis input surface. A
     // structured value serializes as JSON in the body; `!= null` (not
     // truthiness) so an explicit empty object/array/string is still sent.
@@ -237,8 +257,9 @@ export class ModerationClient {
       rand: this.c._rand,
     });
     const timeoutError = () =>
-      new ModerationError(
+      new ModerationTimeout(
         `moderate.input timed out after ${timeoutS}s waiting for job ${jobId}`,
+        { jobId },
       );
     while (true) {
       const remaining = pacer.remaining();
@@ -280,10 +301,11 @@ export class ModerationClient {
       const status = jdata.status as string;
       if (status === "completed" || status === "inbound_blocked") {
         return toModerationResult(
-          opts.prompt,
+          opts.prompt ?? "",
           jobId,
           requestId ?? this.c._requestId(jresp),
           jdata,
+          attachments.length > 0,
         );
       }
       if (status === "failed" || status === "expired") {
@@ -343,6 +365,7 @@ function toModerationResult(
   jobId: string,
   requestId: string | null,
   jdata: Record<string, unknown>,
+  attachmentsSent = false,
 ): InputModerationResult {
   try {
     const inbound = jdata.inbound_result;
@@ -373,6 +396,13 @@ function toModerationResult(
     const blockMessage =
       (ib.block_message as string | null) ??
       (contextBlocked ? (context?.blockMessage ?? null) : null);
+    if (attachmentsSent && !isObject(jdata.file_result)) {
+      // The server finished the input check without analyzing the files —
+      // one that does not know attachments ignores them.
+      throw new FileAnalysisUnavailable(`job ${jobId} finished its input check without a file_result`, {
+        code: "file_result_missing",
+      });
+    }
     return {
       allowed,
       blocked: !allowed,
@@ -384,6 +414,7 @@ function toModerationResult(
       requestId,
       blockedBy: (jdata.blocked_by as string | null) ?? null,
       context,
+      fileResult: isObject(jdata.file_result) ? (jdata.file_result as Record<string, unknown>) : null,
     };
   } catch (e) {
     if (e instanceof CollieError) throw e;
@@ -391,4 +422,25 @@ function toModerationResult(
       code: "invalid_response",
     });
   }
+}
+
+function isObject(v: unknown): boolean {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/** Refused locally, before any request: no prompt and no attachments, a
+ * non-string or empty file id. Returns a copy: the caller's array may change
+ * while the call runs. */
+function validateAttachments(prompt: string | undefined, attachments: unknown): string[] {
+  if (attachments !== undefined && !Array.isArray(attachments)) {
+    throw new TypeError("attachments must be an array of file ids");
+  }
+  const files = (attachments ?? []) as unknown[];
+  if (prompt === undefined && files.length === 0) {
+    throw new TypeError("moderate.input needs a prompt, attachments, or both");
+  }
+  if (files.some((f) => typeof f !== "string" || f.length === 0)) {
+    throw new TypeError("attachments must be non-empty file id strings");
+  }
+  return [...files] as string[];
 }

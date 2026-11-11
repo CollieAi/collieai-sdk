@@ -2,6 +2,18 @@
 
 All notable changes to the CollieAi .NET SDK (`CollieAi.Client`).
 
+## [2.3.0] — 2026-11-11
+
+### Added
+
+- **File analysis (preview — the deployment must enable it).** `collie.Files.UploadAsync(path, retain)`, `GetAsync(id)`, `DeleteAsync(id)` with `FileObject` (`ICollieClient.Files` is a default interface member, so existing implementations keep compiling); `InputModerationRequest.Attachments` — `Prompt` may be omitted when there are attachments; `InputModerationResult.FileResult` summarizes the files. With attachments the request carries `client_now` and `client_deadline_at` (`CollieClientOptions.Timeout` plus `TimeoutS`, computed before the job is created).
+- `FileAnalysisUnavailableException` (a `CollieApiException`): HTTP 422 `file_analysis_unavailable`, or an attachment job that finished without a `file_result` (code `file_result_missing`).
+- `ModerationTimeoutException` (a `ModerationException`, with `JobId`): `CheckInputAsync` / `CheckOutputAsync` throw it when `TimeoutS` runs out. Existing `catch (ModerationException)` blocks keep catching it; the message is unchanged.
+
+### Changed
+
+- `ModerationException` and `CollieApiException` are no longer `sealed` (binary compatible), so the two exceptions above can derive from them. `InputModerationRequest.Prompt` is no longer `required` (nullable).
+
 ## [2.2.0] — 2026-10-06
 
 Additive: one new API (below); no existing member changed and nothing

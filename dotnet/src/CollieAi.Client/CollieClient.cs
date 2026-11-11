@@ -23,6 +23,12 @@ public interface ICollieClient : IAsyncDisposable
     ICollieModerationClient Moderation { get; }
     /// <summary>Customer-owned streaming operations (preflight, protect, sessions, SSE).</summary>
     ICollieStreamingClient Streaming { get; }
+    /// <summary>
+    /// Files (preview): upload a file for analysis, read its metadata, release it.
+    /// A default member, so an existing implementation of this interface keeps
+    /// compiling; <see cref="CollieClient"/> provides it.
+    /// </summary>
+    ICollieFilesClient Files => throw new NotSupportedException("This ICollieClient implementation does not provide Files.");
 }
 
 /// <summary>Test-only seams for deterministic clock/delay/jitter. Internal.</summary>
@@ -80,6 +86,11 @@ public sealed class CollieClient : ICollieClient
     public ICollieModerationClient Moderation { get; }
     /// <summary>Customer-owned streaming operations (preflight, protect, sessions, SSE).</summary>
     public ICollieStreamingClient Streaming { get; }
+    /// <summary>Files (preview): upload a file for analysis, read its metadata, release it.</summary>
+    public ICollieFilesClient Files { get; }
+
+    // The per-request bound, also part of the deadline a job with attachments carries.
+    internal double RequestTimeoutS => _timeout.TotalSeconds;
 
     // Concrete moderation client, so the streaming wrapper can reuse its
     // input-check transport with a wrapper-specific SDK-origin.
@@ -121,6 +132,7 @@ public sealed class CollieClient : ICollieClient
         Moderation = moderation;
         ModerationCore = moderation;
         Streaming = new StreamingClient(this);
+        Files = new FilesClient(this);
     }
 
     private static void ValidateOptions(CollieClientOptions options)
@@ -264,6 +276,42 @@ public sealed class CollieClient : ICollieClient
                 throw new CollieApiException(
                     "API returned a null JSON body", (int)resp.StatusCode, "invalid_response");
             return (parsed, requestId);
+        }
+    }
+
+    // One request whose 2xx body is not a JSON object the caller requires here
+    // (a multipart upload, a 204 delete). Errors are typed as in RequestAsync.
+    internal async Task<(int Status, string Content)> RequestRawAsync(
+        HttpMethod method, string path, HttpContent? content, string origin, CancellationToken ct)
+    {
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(_timeout);
+        HttpResponseMessage resp;
+        try
+        {
+            using var req = new HttpRequestMessage(method, path) { Content = content };
+            req.Headers.TryAddWithoutValidation("X-CollieAi-SDK-Origin", origin);
+            resp = await _http.SendAsync(req, HttpCompletionOption.ResponseContentRead, timeoutCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException ex)
+        {
+            throw new CollieConnectionException($"Request to {path} timed out after {_timeout.TotalSeconds:0.#}s", ex);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException)
+        {
+            throw new CollieConnectionException($"Request to {path} failed: {ex.Message}", ex);
+        }
+        using (resp)
+        {
+            CheckProtocol(resp);
+            string body = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            if ((int)resp.StatusCode >= 400)
+                throw ApiError((int)resp.StatusCode, body);
+            return ((int)resp.StatusCode, body);
         }
     }
 
@@ -627,7 +675,10 @@ public sealed class CollieClient : ICollieClient
     internal CollieApiException ApiError(int status, string content)
     {
         var (code, message) = ParseError(content);
-        return new CollieApiException(message ?? $"HTTP {status}", status, code);
+        // Keyed on the code, not the status: other 422s exist.
+        return code == "file_analysis_unavailable"
+            ? new FileAnalysisUnavailableException(message ?? $"HTTP {status}", status, code)
+            : new CollieApiException(message ?? $"HTTP {status}", status, code);
     }
 
     internal static (string? Code, string? Message) ParseError(string? content)

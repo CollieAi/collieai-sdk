@@ -13,13 +13,16 @@ from __future__ import annotations
 
 import asyncio
 import math
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from datetime import timedelta
+from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence
 
 from ._pacing import PollPacer
 from .errors import (
     CollieAPIError,
     CollieError,
+    FileAnalysisUnavailable,
     ModerationError,
+    ModerationTimeout,
 )
 from .models import (
     ContextModerationResult,
@@ -35,6 +38,8 @@ _SDK_ORIGIN = "moderate.input"
 _SDK_ORIGIN_OUTPUT = "moderate.output"
 # Terminal inbound states that carry a verdict.
 _TERMINAL_VERDICT = {"completed", "inbound_blocked"}
+# The API's upper bound for a job's relative attachments budget.
+_MAX_ATTACHMENTS_BUDGET_S = 90.0
 # Terminal states that mean the job died without a usable verdict.
 _TERMINAL_FAILURE = {"failed", "expired"}
 # The outbound sets — identical to protect_buffered's, because a
@@ -91,7 +96,7 @@ class ModerationClient:
 
     async def input(
         self,
-        prompt: str,
+        prompt: Optional[str] = None,
         *,
         context: Any = None,
         context_format: Optional[str] = None,
@@ -100,6 +105,7 @@ class ModerationClient:
         correlation_id: Optional[str] = None,
         poll_interval_s: float = 0.05,
         timeout_s: float = 30.0,
+        attachments: Optional[Sequence[str]] = None,
     ) -> InputModerationResult:
         """Check ``prompt`` against the project's input rules.
 
@@ -116,6 +122,19 @@ class ModerationClient:
         hint for a *raw string* and is omitted when unset so the policy default
         applies. Until context analysis is enabled server-side, context is
         accepted but inert, and this result is unchanged.
+
+        ``attachments`` (preview) are ids of files uploaded with
+        ``collie.files.upload``; they are checked with the prompt, and the
+        result's ``file_result`` summarizes them. ``prompt`` may be omitted
+        when there are attachments. With attachments the request carries the
+        moment this call gives up (``client_deadline_at``, from the request
+        timeout plus ``timeout_s``) and the client's clock (``client_now``);
+        with no request timeout (``timeout=None``, or an ``httpx.Timeout``
+        without a read timeout) it carries neither, only ``timeout_s`` as the
+        files' budget (``attachments_budget_s``, at most 90 s).
+        Raises :class:`FileAnalysisUnavailable` when the deployment does not
+        analyze files, and :class:`ModerationTimeout` (a
+        :class:`ModerationError`) when ``timeout_s`` runs out.
         """
         self._c._check_project(project_id)
         return await self._run(
@@ -127,6 +146,7 @@ class ModerationClient:
             sdk_origin=_SDK_ORIGIN,
             poll_interval_s=poll_interval_s,
             timeout_s=timeout_s,
+            attachments=attachments,
         )
 
     async def output(
@@ -194,9 +214,10 @@ class ModerationClient:
             # so one `except ModerationError` covers the pair. Everything
             # else (transport, HTTP, malformed bodies) stays typed as-is.
             if exc.code == "poll_timeout":
-                raise ModerationError(
+                raise ModerationTimeout(
                     f"moderate.output timed out after {timeout_s}s "
-                    f"waiting for job {job_id}"
+                    f"waiting for job {job_id}",
+                    job_id=job_id,
                 ) from exc
             if exc.code == "job_failed":
                 # Keep the actual terminal status in the message (input
@@ -265,7 +286,7 @@ class ModerationClient:
 
     async def _run(
         self,
-        prompt: str,
+        prompt: Optional[str],
         *,
         context: Any = None,
         context_format: Optional[str] = None,
@@ -274,15 +295,35 @@ class ModerationClient:
         sdk_origin: str,
         poll_interval_s: float = 0.05,
         timeout_s: float = 30.0,
+        attachments: Optional[Sequence[str]] = None,
     ) -> InputModerationResult:
         """Shared input-check transport. ``sdk_origin`` attributes the requests
         to the public method that triggered them — ``moderate.input`` directly,
         or ``protect_stream`` / ``protect_buffered`` when called from a wrapper."""
         # Knob validation BEFORE the job is created (fail fast, no side effects).
         PollPacer.validate(poll_interval_s, timeout_s)
+        attachments = _validate_attachments(prompt, attachments)
         started = self._c._monotonic()
         # Omit empty strings, not just None: at the SDK boundary "" == unset.
-        body: Dict[str, Any] = {"message_input": prompt, "inbound_only": True}
+        body: Dict[str, Any] = (
+            {"message_input": prompt, "inbound_only": True} if prompt is not None else {"inbound_only": True}
+        )
+        if attachments:
+            # File analysis: the files, and the moment this call
+            # gives up — computed BEFORE the POST from the request timeout plus
+            # the poll budget (which starts after it), with the client's clock
+            # so the server can correct the deadline for skew. An unbounded
+            # request has no such moment; the poll budget is still known, and
+            # it starts no earlier than the server's receipt — sent as the
+            # relative budget instead of the server's fixed default.
+            body["attachments"] = [{"file_id": f} for f in attachments]
+            bound_s = self._c._request_bound_s()
+            if bound_s is not None:
+                now = self._c._utcnow()
+                body["client_now"] = now.isoformat()
+                body["client_deadline_at"] = (now + timedelta(seconds=bound_s + timeout_s)).isoformat()
+            else:
+                body["attachments_budget_s"] = min(timeout_s, _MAX_ATTACHMENTS_BUDGET_S)
         # Context-analysis input surface. A
         # structured value (dict/list) goes on the wire as JSON automatically;
         # a raw string is sent as-is. `is not None` (not truthiness) so an
@@ -324,8 +365,9 @@ class ModerationClient:
         )
 
         def _timeout_error() -> ModerationError:
-            return ModerationError(
-                f"moderate.input timed out after {timeout_s}s waiting for job {job_id}"
+            return ModerationTimeout(
+                f"moderate.input timed out after {timeout_s}s waiting for job {job_id}",
+                job_id=job_id,
             )
 
         while True:
@@ -365,7 +407,8 @@ class ModerationClient:
             status = jdata.get("status")
             if status in _TERMINAL_VERDICT:
                 result = self._to_result(
-                    prompt, job_id, request_id or self._c._request_id(jresp), jdata
+                    prompt, job_id, request_id or self._c._request_id(jresp), jdata,
+                    attachments_sent=bool(attachments),
                 )
                 self._c._debug(
                     "moderate.input",
@@ -390,10 +433,12 @@ class ModerationClient:
 
     @staticmethod
     def _to_result(
-        prompt: str,
+        prompt: Optional[str],
         job_id: str,
         request_id: Optional[str],
         jdata: Dict[str, Any],
+        *,
+        attachments_sent: bool = False,
     ) -> InputModerationResult:
         # A terminal job with a malformed inbound_result / triggered_rules must
         # surface as a typed error, not a raw AttributeError / ValidationError.
@@ -441,17 +486,26 @@ class ModerationClient:
             block_message = inbound.get("block_message")
             if block_message is None and context_blocked:
                 block_message = context.block_message
+            file_result = jdata.get("file_result")
+            if attachments_sent and not isinstance(file_result, dict):
+                # The server finished the input check without analyzing the
+                # files — one that does not know attachments ignores them.
+                raise FileAnalysisUnavailable(
+                    f"job {job_id} finished its input check without a file_result",
+                    code="file_result_missing",
+                )
             return InputModerationResult(
                 allowed=allowed,
                 blocked=not allowed,
                 block_message=block_message,
-                original_text=prompt,
+                original_text=prompt or "",
                 filtered_text=inbound.get("filtered_content"),
                 triggered_rules=triggered,
                 job_id=job_id,
                 request_id=request_id,
                 blocked_by=jdata.get("blocked_by"),
                 context=context,
+                file_result=file_result if isinstance(file_result, dict) else None,
             )
         except CollieError:
             raise
@@ -460,3 +514,17 @@ class ModerationClient:
                 "API returned a malformed moderation result",
                 code="invalid_response",
             ) from exc
+
+
+def _validate_attachments(prompt: Optional[str], attachments: Optional[Sequence[str]]) -> list:
+    """Refused locally, before any request: no prompt and no attachments, a
+    non-string or empty file id. Returns a copy: the caller's list may change
+    while the call runs."""
+    files = list(attachments or ())
+    if isinstance(attachments, str):
+        raise TypeError("attachments must be a list of file ids, not a string")
+    if prompt is None and not files:
+        raise ValueError("moderate.input needs a prompt, attachments, or both")
+    if any(not isinstance(f, str) or not f for f in files):
+        raise ValueError("attachments must be non-empty file id strings")
+    return files
