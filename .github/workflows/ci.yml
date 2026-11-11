@@ -21,7 +21,9 @@ concurrency:
 jobs:
   python:
     name: Python ${{ matrix.python }}
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest is 26.04, for which actions/setup-python has no 3.9
+    # build, so the declared-minimum job would fail before any test ran.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       fail-fast: false

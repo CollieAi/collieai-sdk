@@ -58,10 +58,39 @@ public sealed record InputModerationResult
     public string? JobId { get; init; }
     /// <summary>Server request id (<c>x-request-id</c>) for support/tracing.</summary>
     public string? RequestId { get; init; }
-    /// <summary>Which surface blocked: "prompt", "context", or "none". Null on a job without context analysis.</summary>
+    /// <summary>Which surface blocked: "prompt", "context", "file", or "none". Null on a job without context or file analysis.</summary>
     public string? BlockedBy { get; init; }
     /// <summary>The context-analysis verdict; null on a job without context analysis.</summary>
     public ContextModerationResult? Context { get; init; }
+    /// <summary>
+    /// File analysis (preview): the attachments' summary — admission, extraction,
+    /// detection and the decision they contribute. Null on a job without
+    /// attachments. Raw (snake_case JSON) until the findings are typed.
+    /// </summary>
+    public IReadOnlyDictionary<string, JsonElement>? FileResult { get; init; }
+}
+
+/// <summary>An uploaded file's metadata (<c>collie.Files</c>) — never its content.</summary>
+public sealed record FileObject
+{
+    /// <summary>The file id to attach (<c>InputModerationRequest.Attachments</c>).</summary>
+    public required string Id { get; init; }
+    /// <summary>Size in bytes.</summary>
+    public long Bytes { get; init; }
+    /// <summary>SHA-256 of the content, lowercase hex.</summary>
+    public required string Sha256 { get; init; }
+    /// <summary>The uploaded name; null once the bytes are deleted.</summary>
+    public string? Filename { get; init; }
+    /// <summary>The media type sent with the upload.</summary>
+    public string? DeclaredMediaType { get; init; }
+    /// <summary>uploaded, leased, delete_requested, release_pending, deleted, expired, …</summary>
+    public required string State { get; init; }
+    /// <summary>Whether the bytes are kept for the upload TTL after the last job releases them.</summary>
+    public bool Retain { get; init; }
+    /// <summary>When the file was uploaded.</summary>
+    public DateTimeOffset CreatedAt { get; init; }
+    /// <summary>When an unattached upload expires.</summary>
+    public DateTimeOffset? ExpiresAt { get; init; }
 }
 
 /// <summary>

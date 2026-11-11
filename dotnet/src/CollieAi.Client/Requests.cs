@@ -6,8 +6,8 @@ namespace CollieAi;
 /// <summary>Request for <c>collie.Moderation.CheckInputAsync(...)</c>.</summary>
 public sealed record InputModerationRequest
 {
-    /// <summary>The user prompt to check before calling your LLM.</summary>
-    public required string Prompt { get; init; }
+    /// <summary>The user prompt to check before calling your LLM. May be omitted when there are <see cref="Attachments"/>.</summary>
+    public string? Prompt { get; init; }
 
     /// <summary>Validated against the client's project (the API key scopes the project); not sent in the body.</summary>
     public string? ProjectId { get; init; }
@@ -38,6 +38,16 @@ public sealed record InputModerationRequest
     /// <see cref="ArgumentOutOfRangeException"/> with no side effects.
     /// </summary>
     public double? TimeoutS { get; init; }
+
+    /// <summary>
+    /// File analysis (preview): ids of files uploaded with <c>collie.Files.UploadAsync</c>,
+    /// checked with the prompt; the result's <c>FileResult</c> summarizes them. The
+    /// request then carries the moment this call gives up (<c>client_deadline_at</c>:
+    /// <see cref="CollieClientOptions.Timeout"/> plus <see cref="TimeoutS"/>) and the
+    /// client's clock. Throws <see cref="FileAnalysisUnavailableException"/> when the
+    /// deployment does not analyze files.
+    /// </summary>
+    public IReadOnlyList<string>? Attachments { get; init; }
 }
 
 /// <summary>

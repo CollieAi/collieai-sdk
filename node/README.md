@@ -248,14 +248,35 @@ on.
 const collie = new CollieClient({ apiKey: "clai_...", requestTimeoutS: 10 });
 ```
 
+## Files (preview)
+
+File analysis must be enabled on the deployment; until then these calls throw
+`FileAnalysisUnavailable`. `upload` takes the bytes (the SDK has no runtime
+dependencies):
+
+```ts
+import { readFile } from "node:fs/promises";
+
+const file = await collie.files.upload(await readFile("invoice.pdf"), { filename: "invoice.pdf" });
+const result = await collie.moderate.input({ prompt: "Summarize the attached invoice", attachments: [file.id] });
+console.log(result.blocked, result.fileResult);
+await collie.files.delete(file.id); // the bytes go once no job needs them
+```
+
+`prompt` may be omitted for a check of the files alone. With attachments the
+request tells the server when this call gives up (`client_deadline_at`:
+`requestTimeoutS` plus `timeoutS`).
+
 ## Errors
 
 Catch typed errors (all extend `CollieError`): `ChunkRetryExhausted`,
 `ChunkPolicyChanged`, `ChunkQuotaExceeded`, `ChunkSessionUnrecoverable`,
 `ChunkStreamingUnsupported`, `BufferedFallbackRequired`, `ProjectNotFound` /
 `PlanNotEntitled` / … (`PreflightError`), `ProviderStreamFactoryRequired`,
-`ConcurrentSessionUseError`, `ModerationError`, `CollieConnectionError`,
-`CollieApiError`.
+`ConcurrentSessionUseError`, `ModerationError` (and its `ModerationTimeout`
+when `timeoutS` runs out, with `jobId`), `FileAnalysisUnavailable` (a
+`CollieApiError`: file analysis is off, or the server ignored the attachments),
+`CollieConnectionError`, `CollieApiError`.
 
 ## Develop
 

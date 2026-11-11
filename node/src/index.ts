@@ -10,10 +10,13 @@ export type { CollieClientOptions } from "./client.js";
 export { StreamingClient, StreamingSession, toSse } from "./streaming.js";
 export type { ProtectStreamOptions, ProtectBufferedOptions } from "./streaming.js";
 export { ModerationClient } from "./moderation.js";
+export { FilesClient } from "./files.js";
+export type { UploadOptions } from "./files.js";
 export type { ModerateInputOptions, ModerateOutputOptions } from "./moderation.js";
 export * from "./errors.js";
 export type {
   TriggeredRule,
+  FileObject,
   InputModerationResult,
   OutputModerationResult,
   ContextModerationResult,

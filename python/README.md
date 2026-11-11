@@ -337,6 +337,23 @@ send(safe)
 `filtered_text` carries the masked output — send it, not the original
 (`is not None`, not `or`: an empty string is a real mask result).
 
+## Files (preview)
+
+File analysis must be enabled on the deployment; until then these calls raise
+`FileAnalysisUnavailable`.
+
+```python
+file = await collie.files.upload("invoice.pdf")
+result = await collie.moderate.input("Summarize the attached invoice", attachments=[file.id])
+print(result.blocked, result.file_result)   # file_result: admission, extraction, detection, decision
+await collie.files.delete(file.id)          # the bytes go once no job needs them
+```
+
+`prompt` may be omitted for a check of the files alone. With attachments the
+request tells the server when this call gives up (`client_deadline_at`: the
+request timeout plus `timeout_s`); a client without a request timeout sends
+`timeout_s` as the files' budget instead (at most 90 s).
+
 ## Errors
 
 Catch typed exceptions instead of parsing strings. A few you'll see:
@@ -349,6 +366,8 @@ Catch typed exceptions instead of parsing strings. A few you'll see:
 | `ChunkSessionFinished` | the session already reached a terminal state |
 | `ConcurrentSessionUseError` | overlapping `push()` calls on one session |
 | `ModerationError` | `moderate.input` job failed/expired or timed out |
+| `ModerationTimeout` | a `ModerationError`: `timeout_s` ran out (`job_id` names the job) |
+| `FileAnalysisUnavailable` | a `CollieAPIError`: file analysis is off on this deployment, or the server ignored the attachments |
 | `MaskedInputError` | the wrapper's own gate MASKED the prompt — gate manually, build the factory over `filtered_text`, pass `input_result` |
 
 All inherit from `CollieError`.

@@ -45,10 +45,27 @@ export interface InputModerationResult {
   triggeredRules: TriggeredRule[];
   jobId?: string | null;
   requestId?: string | null;
-  /** Context analysis. blockedBy ∈
-   * {"prompt","context","none"}; context is null on a job without analysis. */
+  /** Context and file analysis. blockedBy ∈
+   * {"prompt","context","file","none"}; context is null on a job without analysis. */
   blockedBy?: string | null;
   context?: ContextModerationResult | null;
+  /** File analysis (preview): the attachments' summary — admission,
+   * extraction, detection and the decision they contribute. Null on a job
+   * without attachments. Raw (snake_case) until the findings are typed. */
+  fileResult?: Record<string, unknown> | null;
+}
+
+/** An uploaded file's metadata (`collie.files`) — never its content. */
+export interface FileObject {
+  id: string;
+  bytes: number;
+  sha256: string;
+  filename: string | null;
+  declaredMediaType: string | null;
+  state: string;
+  retain: boolean;
+  createdAt: string;
+  expiresAt: string | null;
 }
 
 /** Result of `collie.moderate.output(...)`. No

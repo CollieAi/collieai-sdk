@@ -2,6 +2,14 @@
 
 All notable changes to the CollieAi Python SDK.
 
+## [2.3.0] — 2026-11-11
+
+### Added
+
+- **File analysis (preview — the deployment must enable it).** `collie.files.upload(path, retain=False)`, `.get(id)`, `.delete(id)` with `FileObject`; `moderate.input(prompt=None, *, attachments=[file.id, ...])` — `prompt` may be omitted when there are attachments; the result's `file_result` summarizes the files. With attachments the request carries `client_now` and `client_deadline_at` (the request timeout plus `timeout_s`, computed before the job is created; without a request timeout, `attachments_budget_s` = `timeout_s` (at most 90 s) instead).
+- `FileAnalysisUnavailable` (a `CollieAPIError`): HTTP 422 `file_analysis_unavailable`, or an attachment job that finished without a `file_result` (code `file_result_missing`).
+- `ModerationTimeout` (a `ModerationError`, with `job_id`): `moderate.input` / `moderate.output` raise it when `timeout_s` runs out. Existing `except ModerationError` handlers keep catching it; the message is unchanged.
+
 ## [2.2.0] — 2026-10-06
 
 No functional changes: the client behaves exactly as 2.1.0. The source

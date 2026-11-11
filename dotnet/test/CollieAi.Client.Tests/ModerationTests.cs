@@ -400,7 +400,7 @@ public class ModerationTimeoutTests
         // harness's PollDelay is virtual-instant, so elapsed time measures
         // scheduler contention, not the budget (reproduced at 14 s under a
         // loaded suite).
-        var ex = await Assert.ThrowsAsync<ModerationException>(() =>
+        var ex = await Assert.ThrowsAsync<ModerationTimeoutException>(() =>
             client.Moderation.CheckInputAsync(new InputModerationRequest
             {
                 Prompt = "hi",
@@ -415,7 +415,7 @@ public class ModerationTimeoutTests
     {
         var (client, _) = TestClient.Create(NeverTerminal(), advanceClockOnDelay: true);
 
-        var ex = await Assert.ThrowsAsync<ModerationException>(() =>
+        var ex = await Assert.ThrowsAsync<ModerationTimeoutException>(() =>
             client.Moderation.CheckOutputAsync(new OutputModerationRequest
             {
                 Response = "hi",

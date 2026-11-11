@@ -17,14 +17,16 @@ import {
   ChunkStreamingUnsupported,
   CollieApiError,
   CollieConnectionError,
+  FileAnalysisUnavailable,
 } from "./errors.js";
+import { FilesClient } from "./files.js";
 import { ModerationClient } from "./moderation.js";
 import { deadlineSignal, isDeadlineAbort, MAX_TIMEOUT_S, PollPacer } from "./pacing.js";
 import { StreamingClient } from "./streaming.js";
 
 // Keep in sync with package.json — this value is the User-Agent the backend
 // sees, and the release gate verifies it on the wire against the release.
-export const VERSION = "2.2.0";
+export const VERSION = "2.3.0";
 const DEFAULT_BASE_URL = "https://app.collieai.io";
 
 type ChunkErrCtor = new (
@@ -66,6 +68,8 @@ export interface CollieClientOptions {
   sleep?: (seconds: number) => Promise<void>;
   monotonic?: () => number;
   rand?: () => number;
+  /** Wall clock for the deadline sent with attachments (test seam). */
+  utcNow?: () => Date;
   debugLogger?: { debug: (message: string, meta?: unknown) => void };
 }
 
@@ -96,9 +100,13 @@ export class CollieClient {
   readonly projectId?: string;
   readonly moderate: ModerationClient;
   readonly streaming: StreamingClient;
+  /** Files (preview): upload a file for analysis, read its metadata, release it. */
+  readonly files: FilesClient;
 
   private readonly _fetch: typeof fetch;
-  private readonly _requestTimeoutS: number;
+  /** Internal: the per-request bound, also part of the deadline a job with
+   * attachments carries. */
+  readonly _requestTimeoutS: number;
   private readonly _maxRetries: number;
   private readonly _retryCeilingS: number;
   private readonly _baseBackoff: number;
@@ -106,6 +114,7 @@ export class CollieClient {
   readonly _sleep: (seconds: number) => Promise<void>;
   readonly _monotonic: () => number;
   readonly _rand: () => number;
+  readonly _utcNow: () => Date;
   private readonly _debug?: { debug: (message: string, meta?: unknown) => void };
   private protocolWarned = false;
 
@@ -163,9 +172,11 @@ export class CollieClient {
     // Contract) — performance.now() is monotonic; Date.now() is not.
     this._monotonic = options.monotonic ?? (() => performance.now() / 1000);
     this._rand = options.rand ?? Math.random;
+    this._utcNow = options.utcNow ?? (() => new Date());
     this._debug = options.debugLogger;
     this.moderate = new ModerationClient(this);
     this.streaming = new StreamingClient(this);
+    this.files = new FilesClient(this);
   }
 
   /** No-op; provided for API parity (fetch has no pooled client to close). */
@@ -263,10 +274,49 @@ export class CollieClient {
 
   private _apiErrorFromText(text: string, status: number): CollieApiError {
     const { code, message } = this._parseErrorText(text);
-    return new CollieApiError(message ?? `HTTP ${status}`, {
+    // Keyed on the code, not the status: other 422s exist.
+    const Cls = code === "file_analysis_unavailable" ? FileAnalysisUnavailable : CollieApiError;
+    return new Cls(message ?? `HTTP ${status}`, {
       statusCode: status,
       code,
     });
+  }
+
+  /** One request whose 2xx body is not a JSON object the caller requires
+   * here — a multipart upload (bytes with their `contentType`), a 204 delete. Errors are typed as in
+   * `_requestJson`. Returns the response and its signal so a caller can read
+   * the body under the same bound. */
+  async _requestRaw(
+    method: string,
+    path: string,
+    opts: { sdkOrigin: string; body?: Uint8Array; contentType?: string },
+  ): Promise<{ response: Response; signal: AbortSignal }> {
+    let response: Response;
+    const signal = this._requestSignal();
+    const headers = this._headers(opts.sdkOrigin, false);
+    if (opts.contentType) headers["content-type"] = opts.contentType;
+    try {
+      response = await this._fetch(this._url(path), {
+        method,
+        headers,
+        // Bytes, so the length is exact (the API answers 411 without one).
+        body: opts.body as BodyInit | undefined,
+        signal,
+      });
+    } catch (e) {
+      throw new CollieConnectionError(`Request to ${path} failed: ${String(e)}`);
+    }
+    this._checkProtocol(response);
+    if (!response.ok) {
+      let errText: string;
+      try {
+        errText = await response.text();
+      } catch (e) {
+        throw new CollieConnectionError(`Request to ${path} failed reading the error body: ${String(e)}`);
+      }
+      throw this._apiErrorFromText(errText, response.status);
+    }
+    return { response, signal };
   }
 
   /** Build a typed error from a non-2xx response, reading the error body. A

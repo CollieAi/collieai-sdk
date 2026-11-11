@@ -76,3 +76,21 @@ export class ConcurrentSessionUseError extends CollieError {}
 
 /** moderate.input ended failed/expired or timed out without a verdict. */
 export class ModerationError extends CollieError {}
+
+/** moderate.input / moderate.output gave up waiting: the SDK's own poll
+ * budget (`timeoutS`) ran out before a verdict. A `ModerationError`, so
+ * existing `instanceof ModerationError` checks keep catching it. `jobId`
+ * names the job that may still finish server-side. */
+export class ModerationTimeout extends ModerationError {
+  readonly jobId?: string;
+  constructor(message: string, opts: { jobId?: string } = {}) {
+    super(message);
+    this.jobId = opts.jobId;
+  }
+}
+
+/** File analysis is not available for this request: the deployment has it
+ * off (HTTP 422, code `file_analysis_unavailable`), or a job with
+ * attachments finished its input check without a `file_result` (code
+ * `file_result_missing` — a server that does not analyze files). */
+export class FileAnalysisUnavailable extends CollieApiError {}
