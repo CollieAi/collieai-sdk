@@ -49,6 +49,7 @@ internal static class Wire
     public const string OriginProtectStream = "protect_stream";
     public const string OriginProtectBuffered = "protect_buffered";
     public const string OriginSession = "streaming.session";
+    public const string OriginFiles = "files";
 }
 
 // --- Request bodies ----------------------------------------------------------
@@ -70,6 +71,17 @@ internal sealed class JobCreateBody
     // string; null is omitted by the null-ignoring serializer (= unset).
     public object? Context { get; set; }
     public string? ContextFormat { get; set; }
+    // File analysis: the attached files and the moment the call
+    // gives up, with the client's clock for the server's skew correction.
+    // Null = omitted (a job without attachments sends today's body).
+    public List<AttachmentRefDto>? Attachments { get; set; }
+    public DateTimeOffset? ClientDeadlineAt { get; set; }
+    public DateTimeOffset? ClientNow { get; set; }
+}
+
+internal sealed class AttachmentRefDto
+{
+    public string FileId { get; set; } = "";
 }
 
 internal sealed class ChunkBody
@@ -109,6 +121,21 @@ internal sealed class JobStatusDto
     // the strict parse (PollPacer.ParseSuggestedPollMs), never fail the poll
     // with a deserialization error.
     public JsonElement? SuggestedPollMs { get; set; }
+    // File analysis (preview): the attachments' summary, raw until typed.
+    public JsonElement? FileResult { get; set; }
+}
+
+internal sealed class FileObjectDto
+{
+    public string? Id { get; set; }
+    public long? Bytes { get; set; }
+    public string? Sha256 { get; set; }
+    public string? Filename { get; set; }
+    public string? DeclaredMediaType { get; set; }
+    public string? State { get; set; }
+    public bool Retain { get; set; }
+    public DateTimeOffset? CreatedAt { get; set; }
+    public DateTimeOffset? ExpiresAt { get; set; }
 }
 
 internal sealed class ContextResultDto

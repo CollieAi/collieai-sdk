@@ -157,3 +157,21 @@ class ConcurrentSessionUseError(CollieError):
 class ModerationError(CollieError):
     """moderate.input / moderate.output ended in an unexpected terminal state
     (failed/expired) or timed out before producing a verdict."""
+
+
+class ModerationTimeout(ModerationError):
+    """moderate.input / moderate.output gave up waiting: the SDK's own poll
+    budget (``timeout_s``) ran out before a verdict. A :class:`ModerationError`,
+    so existing ``except ModerationError`` handlers keep catching it.
+    ``job_id`` names the job that may still finish server-side."""
+
+    def __init__(self, message: str, *, job_id: Optional[str] = None) -> None:
+        super().__init__(message)
+        self.job_id = job_id
+
+
+class FileAnalysisUnavailable(CollieAPIError):
+    """File analysis is not available for this request: the deployment has it
+    off (HTTP 422, code ``file_analysis_unavailable``), or a job with
+    attachments finished its input check without a ``file_result`` (code
+    ``file_result_missing`` — a server that does not analyze files)."""

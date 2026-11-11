@@ -66,6 +66,7 @@ internal sealed class ModerationClient : ICollieModerationClient
         string? conversationId = Metadata.Normalize(request.ConversationId, nameof(request.ConversationId));
         string? correlationId = Metadata.Normalize(request.CorrelationId, nameof(request.CorrelationId));
         return RunAsync(request.Prompt, request.Context, request.ContextFormat, conversationId, correlationId, Wire.OriginModerateInput, cancellationToken,
+            attachments: request.Attachments,
             timeoutS: request.TimeoutS ?? PollTimeoutS);
     }
 
@@ -106,7 +107,7 @@ internal sealed class ModerationClient : ICollieModerationClient
 
         var pacer = new PollPacer(pollIntervalS, timeoutS, _c.Monotonic, _c.Jitter);
         ModerationException TimeoutError() =>
-            new($"CheckOutput timed out after {timeoutS:0.###}s waiting for job {jobId}");
+            new ModerationTimeoutException($"CheckOutput timed out after {timeoutS:0.###}s waiting for job {jobId}", jobId);
         while (true)
         {
             double remaining = pacer.Remaining();
@@ -170,14 +171,18 @@ internal sealed class ModerationClient : ICollieModerationClient
     /// pre-normalized by the caller.
     /// </summary>
     internal async Task<InputModerationResult> RunAsync(
-        string prompt, object? context, string? contextFormat,
+        string? prompt, object? context, string? contextFormat,
         string? conversationId, string? correlationId, string origin, CancellationToken ct,
-        double pollIntervalS = PollIntervalS, double timeoutS = PollTimeoutS)
+        double pollIntervalS = PollIntervalS, double timeoutS = PollTimeoutS,
+        IReadOnlyList<string>? attachments = null)
     {
         // Knob validation BEFORE the job is created (fail fast, no side
         // effects). The knobs are internal constants today, so this guards
         // future public exposure and test overrides.
         PollPacer.Validate(pollIntervalS, timeoutS);
+        // A copy: the caller's list may change while the call runs.
+        attachments = attachments?.ToArray();
+        ValidateAttachments(prompt, attachments);
         // Context-analysis input surface.
         // Pre-serialize to a JsonElement with default options so customer keys
         // are preserved VERBATIM: the body serializer's SnakeCaseLower
@@ -211,6 +216,18 @@ internal sealed class ModerationClient : ICollieModerationClient
             Context = contextPayload,
             ContextFormat = contextFormat,
         };
+        bool attachmentsSent = attachments is { Count: > 0 };
+        if (attachmentsSent)
+        {
+            // File analysis: the files, and the moment this call
+            // gives up — computed BEFORE the POST from the request timeout plus
+            // the poll budget (which starts after it), with the client's clock
+            // so the server can correct the deadline for skew.
+            DateTimeOffset now = _c.UtcNow();
+            body.Attachments = attachments!.Select(f => new AttachmentRefDto { FileId = f }).ToList();
+            body.ClientNow = now;
+            body.ClientDeadlineAt = now.AddSeconds(_c.RequestTimeoutS + timeoutS);
+        }
         var (created, requestId) = await _c.RequestAsync<JobCreateResponseDto>(
             HttpMethod.Post, "/v1/jobs", body, origin, ct).ConfigureAwait(false);
         string? jobId = created.JobId;
@@ -222,7 +239,7 @@ internal sealed class ModerationClient : ICollieModerationClient
         // semantics. Flow-specific errors stay here; the pacer owns timing.
         var pacer = new PollPacer(pollIntervalS, timeoutS, _c.Monotonic, _c.Jitter);
         ModerationException TimeoutError() =>
-            new($"CheckInput timed out after {timeoutS:0.###}s waiting for job {jobId}");
+            new ModerationTimeoutException($"CheckInput timed out after {timeoutS:0.###}s waiting for job {jobId}", jobId);
         while (true)
         {
             double remaining = pacer.Remaining();
@@ -284,7 +301,7 @@ internal sealed class ModerationClient : ICollieModerationClient
             }
             string? status = job.Status;
             if (status is not null && TerminalVerdict.Contains(status))
-                return ToResult(prompt, jobId, requestId ?? pollRequestId, job);
+                return ToResult(prompt ?? "", jobId, requestId ?? pollRequestId, job, attachmentsSent);
             if (status is not null && TerminalFailure.Contains(status))
                 throw new ModerationException($"Job {jobId} ended in terminal state '{status}' before an input verdict");
             await _c.PollDelay(pacer.NextSleep(job.SuggestedPollMs), ct).ConfigureAwait(false);
@@ -319,7 +336,8 @@ internal sealed class ModerationClient : ICollieModerationClient
         };
     }
 
-    private static InputModerationResult ToResult(string prompt, string jobId, string? requestId, JobStatusDto job)
+    private static InputModerationResult ToResult(string prompt, string jobId, string? requestId, JobStatusDto job,
+        bool attachmentsSent = false)
     {
         // A terminal job must carry its inbound_result; a missing one is malformed,
         // not an implicit "allowed".
@@ -361,6 +379,14 @@ internal sealed class ModerationClient : ICollieModerationClient
                 InferenceDegraded = c.InferenceDegraded,
             }
             : null;
+        IReadOnlyDictionary<string, JsonElement>? fileResult = null;
+        if (job.FileResult is { ValueKind: JsonValueKind.Object } fr)
+            fileResult = fr.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone());
+        else if (attachmentsSent)
+            // The server finished the input check without analyzing the files —
+            // one that does not know attachments ignores them.
+            throw new FileAnalysisUnavailableException(
+                $"job {jobId} finished its input check without a file_result", code: "file_result_missing");
         return new InputModerationResult
         {
             Allowed = allowed,
@@ -377,6 +403,17 @@ internal sealed class ModerationClient : ICollieModerationClient
             RequestId = requestId,
             BlockedBy = job.BlockedBy,
             Context = context,
+            FileResult = fileResult,
         };
+    }
+
+    // Refused locally, before any request: no prompt and no attachments, an
+    // empty file id.
+    private static void ValidateAttachments(string? prompt, IReadOnlyList<string>? attachments)
+    {
+        if (prompt is null && attachments is not { Count: > 0 })
+            throw new ArgumentException("CheckInputAsync needs a Prompt, Attachments, or both.", nameof(prompt));
+        if (attachments is not null && attachments.Any(string.IsNullOrEmpty))
+            throw new ArgumentException("Attachments must be non-empty file ids.", nameof(attachments));
     }
 }

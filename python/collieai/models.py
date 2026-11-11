@@ -66,11 +66,31 @@ class InputModerationResult(BaseModel):
     triggered_rules: List[TriggeredRule] = Field(default_factory=list)
     job_id: Optional[str] = None
     request_id: Optional[str] = None
-    # Context analysis. blocked_by ∈
-    # {"prompt", "context", "none"}; context is the typed verdict (None on a job
-    # without context analysis).
+    # Context and file analysis. blocked_by ∈
+    # {"prompt", "context", "file", "none"}; context is the typed verdict (None
+    # on a job without context analysis).
     blocked_by: Optional[str] = None
     context: Optional[ContextModerationResult] = None
+    # File analysis (preview): the attachments' summary — admission,
+    # extraction, detection and the decision they contribute. None on a job
+    # without attachments. A raw mapping until the findings are typed.
+    file_result: Optional[Dict[str, Any]] = None
+
+
+class FileObject(BaseModel):
+    """An uploaded file's metadata (``collie.files``) — never its content."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    bytes: int
+    sha256: str
+    filename: Optional[str] = None
+    declared_media_type: Optional[str] = None
+    state: str
+    retain: bool = False
+    created_at: datetime
+    expires_at: Optional[datetime] = None
 
 
 class OutputModerationResult(BaseModel):

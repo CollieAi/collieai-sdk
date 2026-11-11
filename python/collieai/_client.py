@@ -14,6 +14,7 @@ import random
 import time
 import warnings
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, Optional, Tuple
 
 import httpx
@@ -33,7 +34,9 @@ from .errors import (
     ChunkStreamingUnsupported,
     CollieAPIError,
     CollieConnectionError,
+    FileAnalysisUnavailable,
 )
+from .files import FilesClient
 from .moderation import ModerationClient
 from .streaming import StreamingClient
 
@@ -105,6 +108,7 @@ class AsyncCollie:
         _sleep: Optional[Callable[[float], Awaitable[None]]] = None,
         _monotonic: Optional[Callable[[], float]] = None,
         _rand: Optional[Callable[[], float]] = None,
+        _utcnow: Optional[Callable[[], datetime]] = None,
     ) -> None:
         if not api_key:
             raise ValueError("api_key is required")
@@ -154,6 +158,9 @@ class AsyncCollie:
         self._sleep = _sleep or asyncio.sleep
         self._monotonic = _monotonic or time.monotonic
         self._rand = _rand or random.random
+        # Wall clock for the deadline sent with attachments (client_now /
+        # client_deadline_at); everything that paces stays on _monotonic.
+        self._utcnow = _utcnow or (lambda: datetime.now(timezone.utc))
         self._protocol_warned = False
 
         if limits is None:
@@ -174,6 +181,7 @@ class AsyncCollie:
 
         self.moderate = ModerationClient(self)
         self.streaming = StreamingClient(self)
+        self.files = FilesClient(self)
 
     # -- lifecycle -----------------------------------------------------------
     async def aclose(self) -> None:
@@ -251,11 +259,44 @@ class AsyncCollie:
 
     def _api_error(self, resp: httpx.Response) -> CollieAPIError:
         code, message = self._parse_error(resp)
-        return CollieAPIError(
+        # Keyed on the code, not the status: other 422s exist.
+        cls = FileAnalysisUnavailable if code == "file_analysis_unavailable" else CollieAPIError
+        return cls(
             message or f"HTTP {resp.status_code}",
             status_code=resp.status_code,
             code=code,
         )
+
+    def _request_bound_s(self) -> Optional[float]:
+        """The client's request timeout in seconds, for the deadline a job with
+        attachments carries: a number as is, an ``httpx.Timeout`` by its read
+        timeout; ``None`` when the request is unbounded (no deadline then)."""
+        t = self._timeout
+        if isinstance(t, httpx.Timeout):
+            t = t.read
+        return float(t) if isinstance(t, (int, float)) else None
+
+    async def _request_raw(
+        self,
+        method: str,
+        url: str,
+        *,
+        sdk_origin: str,
+        files: Any = None,
+        data: Optional[Dict[str, Any]] = None,
+    ) -> httpx.Response:
+        """One request whose 2xx body is not a JSON object the caller requires
+        (a multipart upload, a 204 delete). Typed errors as in _request_json."""
+        try:
+            resp = await self._client.request(
+                method, url, files=files, data=data, headers={"X-CollieAi-SDK-Origin": sdk_origin},
+            )
+        except _TRANSPORT_TIMEOUT_EXC as exc:
+            raise CollieConnectionError(f"Request to {url} failed: {exc}") from exc
+        self._check_protocol(resp)
+        if resp.status_code >= 400:
+            raise self._api_error(resp)
+        return resp
 
     @staticmethod
     def _json_or_error(resp: httpx.Response) -> Any:

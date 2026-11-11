@@ -298,6 +298,26 @@ delivery, `session.MintStreamTokenAsync()` returns a short-lived, job-scoped
 `session.StreamEventsAsync(...)` consumes the CollieAi SSE stream with
 `Last-Event-ID` resume (replayed deltas are de-duplicated).
 
+## Files (preview)
+
+File analysis must be enabled on the deployment; until then these calls throw
+`FileAnalysisUnavailableException`.
+
+```csharp
+FileObject file = await collie.Files.UploadAsync("invoice.pdf");
+var result = await collie.Moderation.CheckInputAsync(new InputModerationRequest
+{
+    Prompt = "Summarize the attached invoice",
+    Attachments = new[] { file.Id },
+});
+Console.WriteLine(result.Blocked);              // result.FileResult: admission, extraction, detection, decision
+await collie.Files.DeleteAsync(file.Id);        // the bytes go once no job needs them
+```
+
+`Prompt` may be omitted for a check of the files alone. With attachments the
+request tells the server when this call gives up (`client_deadline_at`:
+`CollieClientOptions.Timeout` plus `TimeoutS`).
+
 ## Error handling
 
 Typed exceptions map directly to API error codes — never parse strings. Policy
@@ -315,6 +335,8 @@ decisions are **events** (`Blocked` / `InputBlocked`), not exceptions.
 | `ChunkRetryExhaustedException` | Per-chunk retry budget/ceiling hit | Show "try again" |
 | `ConcurrentSessionUseException` | Overlapping `PushAsync`/`FinishAsync` | Serialize submits per session |
 | `ModerationException` | `CheckInputAsync` job died/timed out | Retry; not a policy block |
+| `ModerationTimeoutException` | A `ModerationException`: `TimeoutS` ran out (`JobId` names the job) | Retry, or raise `TimeoutS` |
+| `FileAnalysisUnavailableException` | A `CollieApiException`: file analysis is off, or the server ignored the attachments | Check without files, or enable file analysis |
 | `MaskedInputException` | the wrapper's own gate MASKED the prompt | Gate manually, build the factory over `FilteredText`, pass `InputResult` |
 | `CollieApiException` | Unmapped HTTP / malformed body | Inspect `StatusCode` / `Code` |
 | `CollieConnectionException` | Transport failure before a response | Network/retry |
